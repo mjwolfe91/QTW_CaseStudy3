@@ -13,6 +13,8 @@ library(pastecs)
 library(rpart)
 library(ggplot2)
 library(itertools)
+library(tidyr)
+library(dplyr)
 ```
 
 ## Project Guidelines
@@ -125,8 +127,31 @@ kable(summary(emails[,1:17]), caption = "Table 5: Summary Statistics of Categori
 <br>
 <br>
 
+```{R Categorical Variables Visualization, fig.align = "center", fig.width = 16, fig.height = 8}
+# Initialize an empty dataframe
+TFcounts = data.frame(FeatureVariables = character(), TFcounts = integer())
+for (col in as.list(enumerate(colnames(emails[,1:17])))){
+  #print(col$index)
+  #print(col$value)
+  TFcounts = rbind(TFcounts, data.frame(FeatureVariables = col$value, TFcounts = table(emails[,col$index])))
+}
+
+ggplot(data = TFcounts, aes(x = FeatureVariables, y = TFcounts.Freq, fill = TFcounts.Var1, label = scales::percent(prop.table(TFcounts.Freq)))) +
+  geom_bar(position="fill", stat = "identity") +
+  scale_y_continuous(labels = scales::percent) +
+  theme(legend.position = "top")
+```
+
+
+``` {R Numerical Variables Visualization, fig.align = "center", fig.width = 12, fig.height = 6}
+emails[,c(18:30)] %>% 
+  pivot_longer(., cols = colnames(emails[,c(18:30)]), names_to = "FeatureVariables", values_to = "Val") %>%
+  ggplot(aes(x = FeatureVariables, y = Val)) +
+  geom_boxplot()
+```
+
 ```{R Visualize Missing Values, fig.align = "center"}
-# Initialize an empty data frame by removing all rows from existing data frame
+# Initialize an empty data frame
 missCols = data.frame(FeatureVariables = character(), MissingValues = integer())
 for (col in as.list(enumerate(colnames(emails)))){
   missVals = sum(is.na(emails[,col$index]))
