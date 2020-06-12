@@ -11,6 +11,8 @@ library(knitr)
 library(kableExtra)
 library(pastecs)
 library(rpart)
+library(ggplot2)
+library(itertools)
 ```
 
 ## Project Guidelines
@@ -56,104 +58,87 @@ emilDFrp = load("data.Rda")
 emails = data.frame(emailDFrp)
 
 # Display first and last 10 processed emails from data frame
-kable(head(emails, n=10), caption = "First 10 Process Emails") %>%
+kable(head(emails, n=10), caption = "Table 1: First 10 Process Emails") %>%
   kable_styling(bootstrap_options = c("striped","hover","responsive")) %>%
   scroll_box(width = "100%", height = "465px")
-kable(tail(emails, n=10), caption = "Last 10 Processed Emails") %>%
+kable(tail(emails, n=10), caption = "Table 2: Last 10 Processed Emails") %>%
   kable_styling(bootstrap_options = c("striped","hover","responsive")) %>%
   scroll_box(width = "100%", height = "470px")
+
+# Display Internal Structure of Data Frame
+str(emails)
 ```
+<br>
+
+The first and last 10 messages from the processed emails data are provided above respectively in Table 1 and 2. The first 10 messages are a sample of 10 emails that are labled as not spam and the last 10 messages are a sample of 10 emails that are labeled as spam. The structure of the processed emails dataframe containing a total of 9,348 messages and 30 feature variables is also displayed above. The first 17 features are categorical variables with 2 levels each denoting a boolean value of whether or not the message contains that certain feature. The first feature (isSpam) is the target variable labeling whether or not the email was identified as spam. The last 13 features are numerical variables describing various attributes of the message such as length and number of punctuations present. A full, detailed explanation of each feature in the processed emails dataframe is provided below in Table 3. 
+
+<br>
+
+|   Variable      |      Type    |                                      Definition                                          |
+|:--------------- |:------------:|-----------------------------------------------------------------------------------------:|
+|isSpam           |logical       |TRUE if email message is spam (target variable).                                          |
+|isRe             |logical       |TRUE if "Re:" appears at the start of the subject.                                        |
+|numLines         |integer       |Number of lines in the body of the message.                                               | 
+|bodyCharCt       |integer       |Number of characters in the body of the message.                                          |
+|underscore       |logical       |TRUE if email address in the FROM field of the header contains an underscore.             |
+|subExcCt         |integer       |Number of exclamation marks in the subject.                                               |
+|subQuesCt        |integer       |Number of question marks in the subject.                                                  |
+|numAtt           |integer       |Number of attachments in the message.                                                     |
+|priority         |logical       |TRUE if a Priority key is present in the header.                                          |
+|numRec           |numeric       |Number of recipients of the message, including CCs.                                       |
+|perCaps          |numeric       |Percentage of capitals among all letters in the message body, excluding attachments.      |
+|isInReplyTo      |logical       |TRUE if the In-Reply-To key is present in the header.                                     |
+|sortedRec        |logical       |TRUE if the recipients' email addresses are sorted.                                       |
+|subPunc          |logical       |TRUE if words in the subject have punctuation or numbers embedded in them. (e.g. w!se)    |
+|hour             |numeric       |Hour of the day in the Date field.                                                        |
+|multipartText    |logical       |TRUE if the MIME type is multipart/text.                                                  |
+|hasImages        |logical       |TRUE if the message contains images.                                                      |
+|isPGPsigned      |logical       |TRUE if the message contains a PGP signature.                                             |
+|perHtML          |numeric       |Percentage of characters in HTML tags in the message body in comparison to all characters.|
+|subSpamWords     |logical       |TRUE if the subject contains one of the words in a spam word vector.                      |
+|subBlanks        |numeric       |Percentage of blanks in the subject.                                                      |
+|noHost           |logical       |TRUE if there is no hostname in the Message-Id key in the header.                         |
+|numEnd           |logical       |TRUE if the email sender's address (before the @) ends in a number.                       |
+|isYelling        |logical       |TRUE if the subject is all capital letters.                                               |
+|forwards         |numeric       |Number of forward symbols in a line of the body. (e.g. >>> xxx contains 3 forwards)       |
+|isOrigMsg        |logical       |TRUE if the message body contains the phrase original message.                            |
+|isDear           |logical       |TRUE if the message body contains the word "dear".                                        |
+|isWrote          |logical       |TRUE if the message contains the phrase "wrote:".                                         |
+|avgWordLen       |numeric       |The average length of the words in  a message.                                            |
+|numDlr           |numeric       |Number of dollar signs in the message body.                                               |
+
+Table: Table 3: Variable Definition Table
+<br>
+
+### Summary Statistics 
 
 ```{R Summary Statistics}
-# Display Internal Structure of Data
-str(emails)
-# Display Summary Statistics of Boolean Data Columns
-kable(summary(emails[,1:17])) %>%
-  kable_styling(bootstrap_options = c("striped","responsive")) %>%
-  scroll_box(width = "100%", height = "185px")
 # Display Summary Statistics of Numerical Data Columns
-kable(stat.desc(emails[,18:30])) %>%
+kable(stat.desc(emails[,18:30]), caption = "Table 4: Summary Statistics of Numerical Variables") %>%
   kable_styling(bootstrap_options = c("striped","responsive")) %>%
-  scroll_box(width = "100%", height = "575px")
+  scroll_box(width = "100%", height = "607px")
+# Display Summary Statistics of Boolean Data Columns
+kable(summary(emails[,1:17]), caption = "Table 5: Summary Statistics of Categorical Variables") %>%
+  kable_styling(bootstrap_options = c("striped","responsive")) %>%
+  scroll_box(width = "100%", height = "220px")
 ```
+<br>
+<br>
 
-## Tree Model
-```{R Tree Model}
-set.seed(567)
-n = nrow(emails)
-train = sort(sample(1:n, floor(n/2)))
+```{R Visualize Missing Values, fig.align = "center"}
+# Initialize an empty data frame by removing all rows from existing data frame
+missCols = data.frame(FeatureVariables = character(), MissingValues = integer())
+for (col in as.list(enumerate(colnames(emails)))){
+  missVals = sum(is.na(emails[,col$index]))
+  if (missVals > 0) {
+    #rbind(missCols, as.list(c(col$value,missVals)))
+    missCols = rbind(missCols, data.frame(FeatureVariables = col$value, MissingValues = missVals))
+  }
+}
 
-email.train = emails[train,]
-email.test = emails[-train,]
-
-email.rp = rpart(isSpam ~ . ,                         
-                data = emails,                       
-                subset = train,                       
-                method = "class",                     
-                parms = list(split = "information"),  
-                maxsurrogate = 0,                     
-                cp = 0,                               
-                minsplit = 5,                         
-                minbucket = 2)
-
-summary(email.rp)
-plot(email.rp, 
-     uniform=TRUE,
-     compress=TRUE,
-     margin = .2)
-text(email.rp, 
-     use.n=TRUE, 
-     all = TRUE,
-     fancy = TRUE)
-
-
-colours = apply(matrix(emails[,"isSpam"]), 
-                 1,
-                 function(x){if (x=="Setosa") 
-                   1 else 
-                     if (x == "Versicolor")
-                       2 else 3}
-)
-
-colours <-  c("red", "green3", "blue")[colours]
-
-plot(iris.df[train,"PetalWidth"],iris.df[train,"PetalLength"], 
-     col = colours[train], main = "Recursive partitoning regions")
-lines(x=c(0,2.5), y = c(2.45,2.45), lty = 1)
-lines(x=c(1.65,1.65), y = c(2.45,7), lty = 2)
-lines(x=c(0,1.65), y = c(4.96,4.95), lty = 3)
-
-
-pred.rp = predict(email.rp,
-                   newdata = emailS[-train,],
-                   type = "class")
-pred.rp
-
-predict(email.rp, 
-        newdata = emails[-train,],
-        type = "prob")
-
-predict(email.rp, 
-        newdata = emails[-train,],
-        type = "vector")
-
-predict(email.rp, 
-        newdata = emails[-train,],
-        type = "matrix")
-
-
-table(emails$isSpam[-train], pred.rp)
-
-printcp(email.rp)
-plotcp(email.rp)
-
-email.rp <- prune(email.rp, cp = 0.1)
-
-plot(email.rp, 
-     compress=TRUE,
-     margin = .2)
-text(email.rp, 
-     use.n=TRUE, 
-     all = TRUE,
-     fancy = TRUE)
+ggplot(data = missCols, aes(x=FeatureVariables, y=MissingValues, fill=factor(ifelse(MissingValues>20,"yes","no")))) + 
+  geom_bar(stat = "identity") + 
+  scale_fill_manual(values = c("yes"="red","no"="grey"), guide = FALSE) +
+  labs(title = "Number of Missing Values per Feature Variable", x = "Feature Variable", y = "Missing Values", caption = "Figure 2: Plot of Missing Values per Feature Variable") + 
+  theme(plot.title = element_text(hjust = 0.5), plot.caption = element_text(hjust = 0.5))
 ```
