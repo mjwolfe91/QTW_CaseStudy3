@@ -15,6 +15,7 @@ library(ggplot2)
 library(itertools)
 library(tidyr)
 library(dplyr)
+library(PerformanceAnalytics)
 ```
 
 ## Project Guidelines
@@ -110,45 +111,65 @@ The first and last 10 messages from the processed emails data are provided above
 |numDlr           |numeric       |Number of dollar signs in the message body.                                               |
 
 Table: Table 3: Variable Definition Table
+
 <br>
 
 ### Summary Statistics 
 
-```{R Summary Statistics}
-# Display Summary Statistics of Numerical Data Columns
-kable(stat.desc(emails[,18:30]), caption = "Table 4: Summary Statistics of Numerical Variables") %>%
-  kable_styling(bootstrap_options = c("striped","responsive")) %>%
-  scroll_box(width = "100%", height = "607px")
-# Display Summary Statistics of Boolean Data Columns
-kable(summary(emails[,1:17]), caption = "Table 5: Summary Statistics of Categorical Variables") %>%
-  kable_styling(bootstrap_options = c("striped","responsive")) %>%
-  scroll_box(width = "100%", height = "220px")
-```
-<br>
+The plot shown below in Figure 2 visualizes the class label (True or False) distributions for each of the 17 discrete, categorical variables in the processed emails dataframe, including the target variable "isSpam". Most features are predominately labeled False, indicating that the majority of emails do not contain the described attribute in the message. The only feature with more TRUE values is the "sortedRec" variable, meaning that nearly 90% of emails in the data sort the recipienets' email addresses. 
+
+Most importantly, this figure provides the target variable's stratification levels for the validation scheme when training the classification tree model due to the class imbalance. When holding out a split of the data for testing model performance, the sample will be composed of roughly 25.6% spam emails and 74.4% non-spam emails to ensure that the split is representative of the data as a whole.
 <br>
 
-```{R Categorical Variables Visualization, fig.align = "center", fig.width = 16, fig.height = 8}
+```{R Categorical Variables Visualization, fig.align = "center", fig.width = 11.5, fig.height = 6}
 # Initialize an empty dataframe
-TFcounts = data.frame(FeatureVariables = character(), TFcounts = integer())
+TFcounts = data.frame(FeatureVariables = character(), TFcounts = integer(), total = integer())
 for (col in as.list(enumerate(colnames(emails[,1:17])))){
   #print(col$index)
   #print(col$value)
-  TFcounts = rbind(TFcounts, data.frame(FeatureVariables = col$value, TFcounts = table(emails[,col$index])))
+  TFcounts = rbind(TFcounts, data.frame(FeatureVariables=col$value, TFcounts=table(emails[,col$index]), total=sum(table(emails[,col$index]))))
 }
+TFcounts$labelpos = ifelse(TFcounts$TFcounts.Var1=="F", (1-(TFcounts$TFcounts.Freq/TFcounts$total))+((TFcounts$TFcounts.Freq/TFcounts$total)/2), 
+(TFcounts$TFcounts.Freq/TFcounts$total)/2)
 
-ggplot(data = TFcounts, aes(x = FeatureVariables, y = TFcounts.Freq, fill = TFcounts.Var1, label = scales::percent(prop.table(TFcounts.Freq)))) +
-  geom_bar(position="fill", stat = "identity") +
+ggplot(data = TFcounts, aes(x = FeatureVariables, y = TFcounts.Freq, fill = TFcounts.Var1)) +
+  geom_bar(position="fill", stat = "identity", color="black", width=1.0) +
   scale_y_continuous(labels = scales::percent) +
-  theme(legend.position = "top")
+  geom_text(aes(label = paste0(round((TFcounts.Freq/total)*100,1),"%"),y=labelpos), size = 4) +
+labs(title="Percentage of True/False Values per Categorical Variable", x="Categorical Feature Variable", y="Percentage of Values", fill="Class Labels", caption="Figure 2: Plot of Class Label Distribution per Categorical Feature Variable") + 
+  theme(plot.title=element_text(size=12, hjust=0.5), plot.caption=element_text(size=11, hjust=0.5), legend.position="top", axis.text.x=element_text(angle=30, hjust=1))
 ```
 
+The following plot shown below in Figure 3 visualizes the distribution of data points for continuous feature variables in the processed emails data frame. These features have average values below 25 with roughly half the variables having average values around 0. The distribution of the "forwards", "numRec", "perCaps", "perHTML", and "subBlanks" variables also present long right tails; as can be seen with the accumulation of black dots extending past the box (75th percentile) and towards values of 100.
 
-``` {R Numerical Variables Visualization, fig.align = "center", fig.width = 12, fig.height = 6}
-emails[,c(18:30)] %>% 
-  pivot_longer(., cols = colnames(emails[,c(18:30)]), names_to = "FeatureVariables", values_to = "Val") %>%
+For the features listed in Figure 3, there appears to be only one potential outlier email present with a value greater than 300 for the number of recipients. However, this outlier should not be considered as an error since intuition suggests that this email would most likely be spam due to an usually large number of intended recipients. A quick search for this outlier email verifies that it is a spam message, and further suggests that a higher number of recipients may be correlated with a spam email.
+
+<br>
+
+``` {R Box Plot Visualization, fig.align = "center", fig.width = 11.5, fig.height = 6}
+emails[,20:29] %>% 
+  pivot_longer(., cols = colnames(emails[,20:29]), names_to = "FeatureVariables", values_to = "Val") %>%
   ggplot(aes(x = FeatureVariables, y = Val)) +
-  geom_boxplot()
+  geom_boxplot() +
+  labs(title = "Data Distribution per Continuous Feature Variable", x = "Continuous Feature Variable", y = "Data Values", caption = "Figure 3: Plot of Data Distribution per Continuous Feature Variable") +
+  theme(plot.title = element_text(size=12, hjust=0.5), plot.caption = element_text(size=11, hjust=0.5))
 ```
+<br>
+<br>
+
+The last 3 continuous variables are visualized in a correlation matrix due to the longer right tails in their data distributions. There appears to be outliers present in each of these variables with an email having roughly 6000 lines for numLines, roughly 190000 characters for bodyCharCt, and roughly 2000 dollar signs for numDlr. The outliers for numLines and bodyCharCt do not seem to be errors since their is no maximum text length restriction for emails sent. The large number of dollar signs does seem out of the ordinary, but may be context specific regarding finances. The decision on how to handle this outlier will be further examined when building the model and evaluating if its inclusion affects performance.
+
+Furthermore, this figure indicates an extremely high correlation between the numLines and bodyCharCt since both of these features are measurements of message length. The inclusion of both these variables will be further evaluated in model building to evaluate their effects on performance. Note: bodyCharCt seems to be a more informative measurement of message length.
+
+```{R Correlation Matrix, fig.align = "center", fig.caption = "Figure 4: Correlation Matrix of numLines, bodyChartCt, numDlr"}
+chart.Correlation(emails[,c(18:19,30)], histogram=TRUE)
+```
+
+
+### Impute Missing Values
+The processed emails dataframe has 7 feature that contain missing values: subSpamWords has 7, noHost has 1, isYelling has 7, subExcCt has 20, subQuesCt has 20, and subBlanks has 20. The "numRec" feature has an overwhelmingly larger amount of missing values with 282, as highlighted below in red within Figure 5.
+
+The imputation methods will be made following a training-test split to prevent data leakage. The categorical variables ["subSpamWords", "noHost", "isYelling"] will be imputed via probability based on the distribution frequency of the class labels. The continuous variables will be imputed based on the average/median value of the data points within that respective feature.
 
 ```{R Visualize Missing Values, fig.align = "center"}
 # Initialize an empty data frame
@@ -164,6 +185,27 @@ for (col in as.list(enumerate(colnames(emails)))){
 ggplot(data = missCols, aes(x=FeatureVariables, y=MissingValues, fill=factor(ifelse(MissingValues>20,"yes","no")))) + 
   geom_bar(stat = "identity") + 
   scale_fill_manual(values = c("yes"="red","no"="grey"), guide = FALSE) +
-  labs(title = "Number of Missing Values per Feature Variable", x = "Feature Variable", y = "Missing Values", caption = "Figure 2: Plot of Missing Values per Feature Variable") + 
-  theme(plot.title = element_text(hjust = 0.5), plot.caption = element_text(hjust = 0.5))
+  labs(title = "Number of Missing Values per Feature Variable", x = "Feature Variable", y = "Missing Values", caption = "Figure 5: Plot of Missing Values per Feature Variable") + 
+  theme(plot.title = element_text(size=12, hjust=0.5), plot.caption = element_text(size=11, hjust=0.5))
+```
+
+### Appendix
+```{R Summary Statistics}
+# Display Summary Statistics of Numerical Data Columns
+kable(stat.desc(emails[,18:30]), caption = "Table 4: Summary Statistics of Numerical Variables") %>%
+  kable_styling(bootstrap_options = c("striped","responsive")) %>%
+  scroll_box(width = "100%", height = "607px")
+# Display Summary Statistics of Boolean Data Columns
+kable(summary(emails[,1:17]), caption = "Table 5: Summary Statistics of Categorical Variables") %>%
+  kable_styling(bootstrap_options = c("striped","responsive")) %>%
+  scroll_box(width = "100%", height = "220px")
+```
+
+```{R Additional BoxPlots}
+emails[,c(18:19,30)] %>% 
+  pivot_longer(., cols = colnames(emails[,c(18:19,30)]), names_to = "FeatureVariables", values_to = "Val") %>%
+  ggplot(aes(x = FeatureVariables, y = Val)) +
+  geom_boxplot() +
+  labs(title = "Data Distribution", x = "Continuous Feature Variable", y = "Data Values", caption = "Figure 4: Plot of Data Distribution for numLines, bodyCharCt, numDlr") +
+  theme(plot.title = element_text(size=12, hjust=0.5), plot.caption = element_text(size=11, hjust=0.5))
 ```
