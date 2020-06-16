@@ -11,11 +11,13 @@ library(knitr)
 library(kableExtra)
 library(pastecs)
 library(rpart)
+library(rattle)
+library(caret)
 library(ggplot2)
+library(GGally)
 library(itertools)
 library(tidyr)
 library(dplyr)
-library(PerformanceAnalytics)
 ```
 
 ## Project Guidelines
@@ -52,13 +54,15 @@ The model will be built using data from the open-source [Apache SpamAssassin Pro
 
 An email can be separated into the header and the body. The header contains information regarding the date sent, the sender, the subject, the message ID, carbon copy recipients, and additional routing information. This can be understood as the encasing envelope for the message. The body can understood as the actual letter that contains the intended message for the recipient and may contain additional information beyond text such as file attachments.
 
-A number of text mining and statistical analysis approaches can be taken to derive meaningful features from email messages. Such features are the character count within the body content of the email, the number of accompanying file attachments, and wheter "Re:" appears at the start of the subject to denote a reply. In this study, a pre-processed format of the data was provided so the specific details regarding the data processing steps will not be explained further.
+A number of text mining and statistical analysis approaches can be taken to derive meaningful features from email messages. Such features are the character count within the body content of the email, the number of accompanying file attachments, and wheter "Re:" appears at the start of the subject to denote a reply. In this study, a pre-processed format of the data was provided in a dataframe with 9348 observations and 30 feature variables so the specific details regarding these data processing steps will not be explained further.
 
 ```{R load email data}
 # Load Data (data.Rda file needs to be in same directory as markdown)
 emilDFrp = load("data.Rda")
 # Cast data as data frame
 emails = data.frame(emailDFrp)
+# Remove duplicated emails
+emails = distinct(emails)
 
 # Display first and last 10 processed emails from data frame
 kable(head(emails, n=10), caption = "Table 1: First 10 Process Emails") %>%
@@ -67,13 +71,16 @@ kable(head(emails, n=10), caption = "Table 1: First 10 Process Emails") %>%
 kable(tail(emails, n=10), caption = "Table 2: Last 10 Processed Emails") %>%
   kable_styling(bootstrap_options = c("striped","hover","responsive")) %>%
   scroll_box(width = "100%", height = "470px")
-
-# Display Internal Structure of Data Frame
-str(emails)
 ```
 <br>
 
-The first and last 10 messages from the processed emails data are provided above respectively in Table 1 and 2. The first 10 messages are a sample of 10 emails that are labled as not spam and the last 10 messages are a sample of 10 emails that are labeled as spam. The structure of the processed emails dataframe containing a total of 9,348 messages and 30 feature variables is also displayed above. The first 17 features are categorical variables with 2 levels each denoting a boolean value of whether or not the message contains that certain feature. The first feature (isSpam) is the target variable labeling whether or not the email was identified as spam. The last 13 features are numerical variables describing various attributes of the message such as length and number of punctuations present. A full, detailed explanation of each feature in the processed emails dataframe is provided below in Table 3. 
+```{R Data Frame Structure}
+# Display Internal Structure of Data Frame
+knitr::kable(str(emails), caption = "Table 3: Processed Emails Data Frame Structure and Variable Data Types") %>%
+  kable_styling(bootstrap_options = c("striped","hover","responsive"))
+```
+
+Duplicate emails were found in the provided data frame and were removed for this analysis. The first and last 10 messages from the processed emails data are provided above respectively in Table 1 and 2. The first 10 messages are a sample of 10 emails that are labled as not spam and the last 10 messages are a sample of 10 emails that are labeled as spam. The structure of the processed emails dataframe now contains a total of 6200 messages and 30 feature variables which is also displayed above. The first 17 features are categorical variables with 2 levels each denoting a boolean value of whether or not the message contains that certain feature. The first feature (isSpam) is the target variable labeling whether or not the email was identified as spam. The last 13 features are numerical variables describing various attributes of the message such as length and number of punctuations present. A full, detailed explanation of each feature in the processed emails dataframe is provided below in Table 3. 
 
 <br>
 
@@ -110,7 +117,7 @@ The first and last 10 messages from the processed emails data are provided above
 |avgWordLen       |numeric       |The average length of the words in  a message.                                            |
 |numDlr           |numeric       |Number of dollar signs in the message body.                                               |
 
-Table: Table 3: Variable Definition Table
+Table: Table 4: Variable Definition Table
 
 <br>
 
@@ -118,7 +125,7 @@ Table: Table 3: Variable Definition Table
 
 The plot shown below in Figure 2 visualizes the class label (True or False) distributions for each of the 17 discrete, categorical variables in the processed emails dataframe, including the target variable "isSpam". Most features are predominately labeled False, indicating that the majority of emails do not contain the described attribute in the message. The only feature with more TRUE values is the "sortedRec" variable, meaning that nearly 90% of emails in the data sort the recipienets' email addresses. 
 
-Most importantly, this figure provides the target variable's stratification levels for the validation scheme when training the classification tree model due to the class imbalance. When holding out a split of the data for testing model performance, the sample will be composed of roughly 25.6% spam emails and 74.4% non-spam emails to ensure that the split is representative of the data as a whole.
+Most importantly, this figure provides the target variable's stratification levels for the validation scheme when training the classification tree model due to the class imbalance. When holding out a split of the data for testing model performance, the sample will be composed of roughly 30.3% spam emails and 69.7% non-spam emails to ensure that the split is representative of the data as a whole.
 <br>
 
 ```{R Categorical Variables Visualization, fig.align = "center", fig.width = 11.5, fig.height = 6}
@@ -142,47 +149,64 @@ labs(title="Percentage of True/False Values per Categorical Variable", x="Catego
 
 The following plot shown below in Figure 3 visualizes the distribution of data points for continuous feature variables in the processed emails data frame. These features have average values below 25 with roughly half the variables having average values around 0. The distribution of the "forwards", "numRec", "perCaps", "perHTML", and "subBlanks" variables also present long right tails; as can be seen with the accumulation of black dots extending past the box (75th percentile) and towards values of 100.
 
-For the features listed in Figure 3, there appears to be only one potential outlier email present with a value greater than 300 for the number of recipients. However, this outlier should not be considered as an error since intuition suggests that this email would most likely be spam due to an usually large number of intended recipients. A quick search for this outlier email verifies that it is a spam message, and further suggests that a higher number of recipients may be correlated with a spam email.
+For the features listed in Figure 3, a potential outlier email is highlighted in red that presents with a value of 311 (index 5239) for the number of recipients (numRec). However, this outlier should not be considered as an error since intuition suggests that this email would most likely be spam due to an usually large number of intended recipients. A quick search for this outlier email verifies that it is a spam message, and further suggests that a higher number of recipients may be correlated with a spam email.
 
 <br>
 
 ``` {R Box Plot Visualization, fig.align = "center", fig.width = 11.5, fig.height = 6}
-emails[,20:29] %>% 
-  pivot_longer(., cols = colnames(emails[,20:29]), names_to = "FeatureVariables", values_to = "Val") %>%
-  ggplot(aes(x = FeatureVariables, y = Val)) +
+continuousVals = pivot_longer(emails[,20:29], cols = colnames(emails[,20:29]), names_to = "FeatureVariables", values_to = "Val")
+highlight = continuousVals[which(continuousVals$Val>100),]
+ggplot(continuousVals, aes(x = FeatureVariables, y = Val)) +
   geom_boxplot() +
+  geom_point(data=highlight, colour="red", size=3) + 
   labs(title = "Data Distribution per Continuous Feature Variable", x = "Continuous Feature Variable", y = "Data Values", caption = "Figure 3: Plot of Data Distribution per Continuous Feature Variable") +
   theme(plot.title = element_text(size=12, hjust=0.5), plot.caption = element_text(size=11, hjust=0.5))
 ```
 <br>
 <br>
 
-The last 3 continuous variables are visualized in a correlation matrix due to the longer right tails in their data distributions. There appears to be outliers present in each of these variables with an email having roughly 6000 lines for numLines, roughly 190000 characters for bodyCharCt, and roughly 2000 dollar signs for numDlr. The outliers for numLines and bodyCharCt do not seem to be errors since their is no maximum text length restriction for emails sent. The large number of dollar signs does seem out of the ordinary, but may be context specific regarding finances. The decision on how to handle this outlier will be further examined when building the model and evaluating if its inclusion affects performance.
+The last 3 continuous variables are visualized in a correlation matrix due to the longer right tails in their data distributions. The correlation matrix visualization (Figure 4) displays bivariate scatterplots with fitted lines on the bottom left, histograms of each variable along the diagnonal, and corresponding pearson's correlation on the top right for the numLines, bodyChartCt, and numDlr features. The scales for the x and y axis are representative of that particular variable's range of values. There appears to be outliers present in each of these variables with an email having 6319 lines for numLines, 188505 characters for bodyCharCt, and 1977 dollar signs for numDlr. These outlier values are highlighted in red in Figure 4 for easier visualization. 
 
-Furthermore, this figure indicates an extremely high correlation between the numLines and bodyCharCt since both of these features are measurements of message length. The inclusion of both these variables will be further evaluated in model building to evaluate their effects on performance. Note: bodyCharCt seems to be a more informative measurement of message length.
+The outliers for numLines and bodyCharCt appear to come from the same emails (index 4193), but do not seem to be errors since their is no maximum text length restriction for emails sent. The large number of dollar signs indicates an outlier (index 3997) that does seem out of the ordinary, but may be context specific regarding finances. The decision on how to handle these outliers will be further examined when building the model and evaluating if its inclusion affects performance. Furthermore, this figure indicates an extremely high correlation between the numLines and bodyCharCt since both of these features are measurements of message length. The inclusion of both these variables will be further evaluated in model building to evaluate their effects on performance. Note: bodyCharCt seems to be a more informative measurement of message length.
 
-```{R Correlation Matrix, fig.align = "center", fig.caption = "Figure 4: Correlation Matrix of numLines, bodyChartCt, numDlr"}
-chart.Correlation(emails[,c(18:19,30)], histogram=TRUE)
+```{R Correlation Matrix, fig.align = "center", fig.width=7, fig.height=7}
+fitLine <- function(data, mapping, ...){
+  p <- ggplot(data = data, mapping = mapping)  +
+    geom_point(alpha=0.3) +
+    geom_point(emails[c(3997, 4193),c(18,19,30)], mapping = mapping, color="red", size=2) +
+    geom_smooth(method=lm, fill="blue", color="blue", ...)
+  p
+}
+ggpairs(emails[,c(18,19,30)], axisLabels="show", lower=list(continuous=fitLine)) + 
+  labs(title="Correlation Matrix of Continuous Variables with Heavy Right-Skewed Distributions", caption="Figure 4: Correlation Matrix of numLines, bodyCharCt, and numDlr") +
+  theme(plot.title = element_text(size=12, hjust=0.5), plot.caption = element_text(size=11, hjust=0.5))
 ```
+<br>
 
-### Train Test Split
+### Train-Test Split
+The processed emails data frame is split into a training set that contains 70% of the emails and a test set that contains 30% of the emails with stratified sampling to preserve the class distributions of the target variable "isSpam", meaning each data split will contain roughly 70% non-spam emails and 30% spam emails. The training set has 4341 observations and the test set has 1859 observations. 
+
+Following this split, the training and test splits also appear to maintain approximately the same levels of class distributions for the other categorical variables (plot shown in the Appendix) with only slight changes in the thousandth decimal place compared to Figure 2.
+
+The training split will be used to tune hyperparameters in the classification tree model in a k-fold cross validation scheme while the test split will be saved to evaluate the performance of our final model.
 
 ```{R Train Test Split}
 set.seed(567)
-n = nrow(emails)
-train = sort(sample(1:n, floor(n/2)))
-
-emails.train = emails[train,]
-emails.test = emails[-train,]
+# Stratify Train-Test Split to preserve target variable ("isSpam")
+# Class distributions are also nearly preserved with slight changes in the thousandth decimal place
+spamStrata = createDataPartition(emails$isSpam, times = 1, p = 0.7, list = F)
+train <- emails[spamStrata,]
+test <- emails[-spamStrata,]
 ```
 
 
 ### Impute Missing Values
-The processed emails dataframe has 7 feature that contain missing values: subSpamWords has 7, noHost has 1, isYelling has 7, subExcCt has 20, subQuesCt has 20, and subBlanks has 20. The "numRec" feature has an overwhelmingly larger amount of missing values with 282, as highlighted below in red within Figure 5.
+The processed emails dataframe has 7 feature that contain missing values: subSpamWords has 4, noHost has 1, isYelling has 4, subExcCt has 16, subQuesCt has 16, and subBlanks has 16. The "numRec" feature has an overwhelmingly larger amount of missing values with 147, as highlighted below in red within Figure 5.
 
-The imputation methods will be made following a training-test split to prevent data leakage. The categorical variables ["subSpamWords", "noHost", "isYelling"] will be imputed via probability based on the distribution frequency of the class labels. The continuous variables will be imputed based on the average/median value of the data points within that respective feature.
+The imputation methods will be made based on only the training data split to prevent data leakage. The categorical variables ["subSpamWords", "noHost", "isYelling"] will be imputed via probability based on the distribution frequency of the class labels. The continuous variables will be imputed based on the average/median value of the data points within that respective feature.
 
-```{R Visualize Missing Values, fig.align = "center"}
+
+```{R Visualize Missing Values, fig.align = "center", fig.width=7, fig.height=7}
 # Initialize an empty data frame
 missCols = data.frame(FeatureVariables = character(), MissingValues = integer())
 for (col in as.list(enumerate(colnames(emails)))){
@@ -199,88 +223,79 @@ ggplot(data = missCols, aes(x=FeatureVariables, y=MissingValues, fill=factor(ife
   labs(title = "Number of Missing Values per Feature Variable", x = "Feature Variable", y = "Missing Values", caption = "Figure 5: Plot of Missing Values per Feature Variable") + 
   theme(plot.title = element_text(size=12, hjust=0.5), plot.caption = element_text(size=11, hjust=0.5))
 ```
+<br>
+
+For the "subExcCt" and "subQuestCt" features, the median value will be used to impute missing values instead of the mean since these variable descriptions indicate an integer value instead of a floating point value. These appears to be the imputation approach as well since the mean values for these variables are close to one (~0.15). An argument can also be made to impute the "numRec" feature with the median value as well due to the influence of the outlier value noted before. However, that outlier does not appear to heavily skew the average and thus the mean value appears to be a representative imputation choice in this case. 
+
+Since the "numRec" also indicates an integer value, the imputed mean value will be rounded to the nearest whole number. In cases where there is an outlier value present that skews the average value out of proportion, the decision to impute by median value is recommended as a more representative value of the data. Since the "subBlanks" feature is a measure of percentage, the mean value is chosen as the imputation method. The mean and median for this variable is roughly the same at about ~13-14%. 
+
+Summary statistics of the data splits following imputation can be examined in the Appendix verifying that missing values no longer exist in the data.
 
 ```{R Imputation}
-#function to fill categorical variables
-fill_categorical_sample = function(x) {
-    x_na = is.na(x)
-    x[x_na] = sample(x[!x_na], size = sum(x_na), replace = TRUE)
-    return(x)
-}
-
 #Continuous Variables in Training set
-emails.train$subExcCt = ifelse(is.na(emails.train$subExcCt), mean(emails.train$subExcCt,na.rm=T), emails.train$subExcCt)
-emails.train$subQuesCt = ifelse(is.na(emails.train$subQuesCt), mean(emails.train$subQuesCt,na.rm=T), emails.train$subQuesCt)
-emails.train$subBlanks = ifelse(is.na(emails.train$subBlanks), mean(emails.train$subBlanks,na.rm=T), emails.train$subBlanks)
-emails.train$numRec = ifelse(is.na(emails.train$numRec), mean(emails.train$numRec,na.rm=T), emails.train$numRec)
+train$subExcCt = ifelse(is.na(train$subExcCt), median(train$subExcCt,na.rm=T), train$subExcCt)
+train$subQuesCt = ifelse(is.na(train$subQuesCt), median(train$subQuesCt,na.rm=T), train$subQuesCt)
+train$subBlanks = ifelse(is.na(train$subBlanks), mean(train$subBlanks,na.rm=T), train$subBlanks)
+train$numRec = ifelse(is.na(train$numRec), round(mean(train$numRec,na.rm=T)), train$numRec)
 
 #Categorical Variables in Training set
-#set(emails.train, subSpamWords, fill_categorical_sample(subSpamWords), by = isSpam)
-#emails.train[, subSpamWords := fill_categorical_sample(subSpamWords), by = isSpam]
-#emails.train[, noHost := fill_categorical_sample(noHost), by=isSpam]
-#emails.train[, isYelling := fill_categorical_sample(isYelling), by=isSpam]
+train$subSpamWords = factor(ifelse(is.na(train$subSpamWords), sample(x=factor(c(F,T), labels = c("F","T")), prob=c(table(train$subSpamWords)["F"]/sum(complete.cases(train$subSpamWords)), table(train$subSpamWords)["T"]/sum(complete.cases(train$subSpamWords)))), train$subSpamWords), labels = c("F","T"))
+
+train$noHost = factor(ifelse(is.na(train$noHost), sample(x=factor(c(F,T), labels = c("F","T")), prob=c(table(train$noHost)["F"]/sum(complete.cases(train$noHost)), table(train$noHost)["T"]/sum(complete.cases(train$noHost)))), train$noHost), labels = c("F","T"))
+
+train$isYelling = factor(ifelse(is.na(train$isYelling), sample(x=factor(c(F,T), labels = c("F","T")), prob=c(table(train$isYelling)["F"]/sum(complete.cases(train$isYelling)), table(train$isYelling)["T"]/sum(complete.cases(train$isYelling)))), train$isYelling), labels = c("F","T"))
+
 
 #Continuous Variables in Test set
-emails.test$subExcCt = ifelse(is.na(emails.test$subExcCt), mean(emails.test$subExcCt,na.rm=T), emails.test$subExcCt)
-emails.test$subQuesCt = ifelse(is.na(emails.test$subQuesCt), mean(emails.test$subQuesCt,na.rm=T), emails.test$subQuesCt)
-emails.test$subBlanks = ifelse(is.na(emails.test$subBlanks), mean(emails.test$subBlanks,na.rm=T), emails.test$subBlanks)
-emails.test$numRec = ifelse(is.na(emails.test$numRec), mean(emails.test$numRec,na.rm=T), emails.test$numRec)
+test$subExcCt = ifelse(is.na(test$subExcCt), median(train$subExcCt,na.rm=T), test$subExcCt)
+test$subQuesCt = ifelse(is.na(test$subQuesCt), median(train$subQuesCt,na.rm=T), test$subQuesCt)
+test$subBlanks = ifelse(is.na(test$subBlanks), mean(train$subBlanks,na.rm=T), test$subBlanks)
+test$numRec = ifelse(is.na(test$numRec), round(mean(train$numRec,na.rm=T)), test$numRec)
 
 #Categorical Variables in Test set
-#emails.test[, subSpamWords := fill_categorical_sample(subSpamWords), by=isSpam]
-#emails.test[, noHost := fill_categorical_sample(noHost), by=isSpam]
-#emails.test[, isYelling := fill_categorical_sample(isYelling), by=isSpam]
+test$subSpamWords = factor(ifelse(is.na(test$subSpamWords), sample(x=factor(c(F,T), labels = c("F","T")), prob=c(table(train$subSpamWords)["F"]/sum(complete.cases(train$subSpamWords)), table(train$subSpamWords)["T"]/sum(complete.cases(train$subSpamWords)))), test$subSpamWords), labels = c("F","T"))
 
+test$noHost = factor(ifelse(is.na(test$noHost), sample(x=factor(c(F,T), labels = c("F","T")), prob=c(table(train$noHost)["F"]/sum(complete.cases(train$noHost)), table(train$noHost)["T"]/sum(complete.cases(train$noHost)))), test$noHost), labels = c("F","T"))
+
+test$isYelling = factor(ifelse(is.na(test$isYelling), sample(x=factor(c(F,T), labels = c("F","T")), prob=c(table(train$isYelling)["F"]/sum(complete.cases(train$isYelling)), table(train$isYelling)["T"]/sum(complete.cases(train$isYelling)))), test$isYelling), labels = c("F","T"))
 ```
 
-### Tree Based Model
+<br>
 
+## Classification Tree-Based Model
 ```{R Tree Model, fig.align = "center"}
-emails.rp = rpart(isSpam ~ . , data = emails, subset = train, method = "class", parms = list(split = "information"), maxsurrogate = 0, cp = 0, minsplit = 5, minbucket = 2)
+emails.rp = rpart(isSpam ~ ., 
+                  data = train, 
+                  method = "class", 
+                  parms = list(split = "information"), 
+                  maxsurrogate = 1, 
+                  cp = 0, 
+                  minsplit = 100, 
+                  minbucket = 50)
 summary(emails.rp)
-plot(emails.rp, uniform=TRUE, compress=TRUE, margin = .2)
-text(emails.rp, use.n=TRUE, all = TRUE, fancy = TRUE)
-```
-
-
-```{R Plot Tree Model, fig.align = "center"}
-colours = apply(matrix(emails[,"isSpam"]), 
-                 1,
-                 function(x){if (x=="Setosa") 
-                   1 else 
-                     if (x == "Versicolor")
-                       2 else 3}
-)
-
-colours <-  c("red", "green3", "blue")[colours]
-
-plot(emails[train,"numLines"],emails[train,"bodyCharCt"], 
-     col = colours[train], main = "Recursive partitoning regions")
-lines(x=c(0,2.5), y = c(2.45,2.45), lty = 1)
-lines(x=c(1.65,1.65), y = c(2.45,7), lty = 2)
-lines(x=c(0,1.65), y = c(4.96,4.95), lty = 3)
+fancyRpartPlot(emails.rp, main="Decision Tree Graph")
 ```
 
 ```{R Predict Tree Model, fig.align = "center"}
 pred.rp = predict(emails.rp,
-                   newdata = emails[-train,],
-                   type = "class")
+                  newdata = test,
+                  type = "class")
 pred.rp
 
 predict(emails.rp, 
-        newdata = emails[-train,],
+        newdata = test,
         type = "prob")
 
 predict(emails.rp, 
-        newdata = emails[-train,],
+        newdata = test,
         type = "vector")
 
 predict(emails.rp, 
-        newdata = emails[-train,],
+        newdata = test,
         type = "matrix")
 
 
-table(emails$isSpam[-train], pred.rp)
+table(test$isSpam, pred.rp)
 
 printcp(emails.rp)
 plotcp(emails.rp)
@@ -298,23 +313,78 @@ text(emails.rp,
      fancy = TRUE)
 ```
 
+
+
+
 ### Appendix
+Further exploratory data analysis can be examined in the tables and figures provided below to better understand the data and where specific values mentioned were extracted from.
+
+#### Entire Processed Emails Data Frame
 ```{R Summary Statistics}
 # Display Summary Statistics of Numerical Data Columns
-kable(stat.desc(emails[,18:30]), caption = "Table 4: Summary Statistics of Numerical Variables") %>%
+kable(stat.desc(emails[,18:30]), caption = "Summary Statistics of Numerical Variables (All Emails)") %>%
   kable_styling(bootstrap_options = c("striped","responsive")) %>%
   scroll_box(width = "100%", height = "607px")
 # Display Summary Statistics of Boolean Data Columns
-kable(summary(emails[,1:17]), caption = "Table 5: Summary Statistics of Categorical Variables") %>%
+kable(summary(emails[,1:17]), caption = "Summary Statistics of Categorical Variables (All Emails)") %>%
   kable_styling(bootstrap_options = c("striped","responsive")) %>%
   scroll_box(width = "100%", height = "220px")
 ```
 
-```{R Additional BoxPlots}
-emails[,c(18:19,30)] %>% 
-  pivot_longer(., cols = colnames(emails[,c(18:19,30)]), names_to = "FeatureVariables", values_to = "Val") %>%
-  ggplot(aes(x = FeatureVariables, y = Val)) +
-  geom_boxplot() +
-  labs(title = "Data Distribution", x = "Continuous Feature Variable", y = "Data Values", caption = "Figure 4: Plot of Data Distribution for numLines, bodyCharCt, numDlr") +
-  theme(plot.title = element_text(size=12, hjust=0.5), plot.caption = element_text(size=11, hjust=0.5))
+<br>
+
+#### Training-Test Data Splits
+``` {R Summary Statistics following Imputation of Data Splits}
+# Training Data
+kable(stat.desc(train[,18:30]), caption = "Summary Statistics of Numerical Variables (Training Data)") %>%
+  kable_styling(bootstrap_options = c("striped","responsive")) %>%
+  scroll_box(width = "100%", height = "615px")
+kable(summary(train[,1:17]), caption = "Summary Statistics of Categorical Variables (Training Data)") %>%
+  kable_styling(bootstrap_options = c("striped","responsive")) %>%
+  scroll_box(width = "100%", height = "177px")
+
+# Display Summary Statistics of Numerical Data Columns
+kable(stat.desc(test[,18:30]), caption = "Summary Statistics of Numerical Variables (Test Data)") %>%
+  kable_styling(bootstrap_options = c("striped","responsive")) %>%
+  scroll_box(width = "100%", height = "615px")
+# Display Summary Statistics of Boolean Data Columns
+kable(summary(test[,1:17]), caption = "Summary Statistics of Categorical Variables (Test Data)") %>%
+  kable_styling(bootstrap_options = c("striped","responsive")) %>%
+  scroll_box(width = "100%", height = "177px")
+```
+
+```{R Class Distribution Check for Categorical Variables Following Stratified Sample Split, fig.align = "center", fig.width = 11.5, fig.height = 6}
+# Initialize an empty dataframe
+TFcounts = data.frame(FeatureVariables = character(), TFcounts = integer(), total = integer())
+for (col in as.list(enumerate(colnames(train[,1:17])))){
+  #print(col$index)
+  #print(col$value)
+  TFcounts = rbind(TFcounts, data.frame(FeatureVariables=col$value, TFcounts=table(train[,col$index]), total=sum(table(train[,col$index]))))
+}
+TFcounts$labelpos = ifelse(TFcounts$TFcounts.Var1=="F", (1-(TFcounts$TFcounts.Freq/TFcounts$total))+((TFcounts$TFcounts.Freq/TFcounts$total)/2), 
+                           (TFcounts$TFcounts.Freq/TFcounts$total)/2)
+
+ggplot(data = TFcounts, aes(x = FeatureVariables, y = TFcounts.Freq, fill = TFcounts.Var1)) +
+  geom_bar(position="fill", stat = "identity", color="black", width=1.0) +
+  scale_y_continuous(labels = scales::percent) +
+  geom_text(aes(label = paste0(round((TFcounts.Freq/total)*100,1),"%"),y=labelpos), size = 4) +
+  labs(title="Percentage of True/False Values per Categorical Variable (Train Split)", x="Categorical Feature Variable", y="Percentage of Values", fill="Class Labels")+#, caption="Plot of Class Label Distribution per Categorical Feature Variable (Training Data)") + 
+  theme(plot.title=element_text(size=12, hjust=0.5), plot.caption=element_text(size=11, hjust=0.5), legend.position="top", axis.text.x=element_text(angle=30, hjust=1))
+
+# Initialize an empty dataframe
+TFcounts = data.frame(FeatureVariables = character(), TFcounts = integer(), total = integer())
+for (col in as.list(enumerate(colnames(test[,1:17])))){
+  #print(col$index)
+  #print(col$value)
+  TFcounts = rbind(TFcounts, data.frame(FeatureVariables=col$value, TFcounts=table(test[,col$index]), total=sum(table(test[,col$index]))))
+}
+TFcounts$labelpos = ifelse(TFcounts$TFcounts.Var1=="F", (1-(TFcounts$TFcounts.Freq/TFcounts$total))+((TFcounts$TFcounts.Freq/TFcounts$total)/2), 
+                           (TFcounts$TFcounts.Freq/TFcounts$total)/2)
+
+ggplot(data = TFcounts, aes(x = FeatureVariables, y = TFcounts.Freq, fill = TFcounts.Var1)) +
+  geom_bar(position="fill", stat = "identity", color="black", width=1.0) +
+  scale_y_continuous(labels = scales::percent) +
+  geom_text(aes(label = paste0(round((TFcounts.Freq/total)*100,1),"%"),y=labelpos), size = 4) +
+  labs(title="Percentage of True/False Values per Categorical Variable (Test Split)", x="Categorical Feature Variable", y="Percentage of Values", fill="Class Labels")+#, caption="Plot of Class Label Distribution per Categorical Feature Variable (Test Data)") + 
+  theme(plot.title=element_text(size=12, hjust=0.5), plot.caption=element_text(size=11, hjust=0.5), legend.position="top", axis.text.x=element_text(angle=30, hjust=1))
 ```
