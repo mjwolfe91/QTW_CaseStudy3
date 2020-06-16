@@ -18,6 +18,7 @@ library(GGally)
 library(itertools)
 library(tidyr)
 library(dplyr)
+library(e1071)
 ```
 
 ## Project Guidelines
@@ -128,12 +129,10 @@ The plot shown below in Figure 2 visualizes the class label (True or False) dist
 Most importantly, this figure provides the target variable's stratification levels for the validation scheme when training the classification tree model due to the class imbalance. When holding out a split of the data for testing model performance, the sample will be composed of roughly 30.3% spam emails and 69.7% non-spam emails to ensure that the split is representative of the data as a whole.
 <br>
 
-```{R Categorical Variables Visualization, fig.align = "center", fig.width = 11.5, fig.height = 6}
+```{R Categorical Variables Visualization, fig.align="center", fig.height=6, fig.width=11.5}
 # Initialize an empty dataframe
 TFcounts = data.frame(FeatureVariables = character(), TFcounts = integer(), total = integer())
 for (col in as.list(enumerate(colnames(emails[,1:17])))){
-  #print(col$index)
-  #print(col$value)
   TFcounts = rbind(TFcounts, data.frame(FeatureVariables=col$value, TFcounts=table(emails[,col$index]), total=sum(table(emails[,col$index]))))
 }
 TFcounts$labelpos = ifelse(TFcounts$TFcounts.Var1=="F", (1-(TFcounts$TFcounts.Freq/TFcounts$total))+((TFcounts$TFcounts.Freq/TFcounts$total)/2), 
@@ -169,7 +168,7 @@ The last 3 continuous variables are visualized in a correlation matrix due to th
 
 The outliers for numLines and bodyCharCt appear to come from the same emails (index 4193), but do not seem to be errors since their is no maximum text length restriction for emails sent. The large number of dollar signs indicates an outlier (index 3997) that does seem out of the ordinary, but may be context specific regarding finances. The decision on how to handle these outliers will be further examined when building the model and evaluating if its inclusion affects performance. Furthermore, this figure indicates an extremely high correlation between the numLines and bodyCharCt since both of these features are measurements of message length. The inclusion of both these variables will be further evaluated in model building to evaluate their effects on performance. Note: bodyCharCt seems to be a more informative measurement of message length.
 
-```{R Correlation Matrix, fig.align = "center", fig.width=7, fig.height=7}
+```{R Correlation Matrix, fig.align="center", fig.height=7, fig.width=7, message=FALSE}
 fitLine <- function(data, mapping, ...){
   p <- ggplot(data = data, mapping = mapping)  +
     geom_point(alpha=0.3) +
@@ -263,54 +262,54 @@ test$isYelling = factor(ifelse(is.na(test$isYelling), sample(x=factor(c(F,T), la
 <br>
 
 ## Classification Tree-Based Model
-```{R Tree Model, fig.align = "center"}
-emails.rp = rpart(isSpam ~ ., 
+The classification tree will be trained through recursive partitioning on the training data split. This approach builds a decision tree that aims to accurately label the emails by splitting into subpopulations of emails based on threshold values or labels of the independent explanatory variables in the data. The recursive process begins with all emails in the training data labeled according to the target variable (isSpam), a number of splits on different feature criterion will follow based on the inputted model hyperparameters.
+
+### Hyperparameter Tuning
+The following hyperparameters were tuned in the classification tree: complexity parameter (cp), the maximum depth of any node in the final tree (maxdepth), the minimum number of observations that must exist in a node for a split to occur (minsplit), and the number of observations in any terminal node (minbucket).
+
+The complexity parameter influences computation time by pruning off splits that do not decrease the overall lack of fit by the cp value. The maximum depth is the length of the tree from root node to terminal node and controls for possible number of splits starting from the root node. The minsplit and minbucket parameters are related by restricting the minimum number of emails that must exist in a node. The difference is that the minsplit uses the parameter value to determine a potential split and minbucket uses the parameter value as a requirement size for a terminal node (bottom of tree).
+
+Vectors of hyperparameter values to be tuned are performed in a grid search fashion to find the values that yield the misclassification rate in the tree. The grid search results are visualized in plots to easily locate parameter values that yield the lowest misclassification rate. The optimal values found were 0.002 for cp, 11 for max depth, 40 for min split, and 10 for minbucket. A max depth of 11 was chosen since there appears to be diminishing returns in error minimization following that value. A minsplit value of 40 and minbucket value of 10 were chosen because they were the highest values that yielded the lowest error. This was done to prevent overcomplex models and promote more efficient computational times. 
+
+```{R Hyperparameter Tuning}
+set.seed(567)
+#cp
+tune.cp <- tune.rpart(isSpam~., data=train, 
+                      cp=c(0.001,0.0015,0.002,0.0025,0.003,0.0035,0.004)) #0.002
+plot(tune.cp, main = "Performance of Tree vs. cp") 
+#maxdepth
+tune.maxdepth <- tune.rpart(isSpam~., data=train, 
+                            maxdepth=c(1:15)) #11
+plot(tune.maxdepth, main = "Performance of Tree vs. Max Depth")
+#minsplit
+tune.minsplit <- tune.rpart(isSpam~., data=train, 
+                            minsplit=c(10,20,30,40,50)) #40
+plot(tune.minsplit, main = "Performance of Tree vs. MinSplit")
+#minbucket
+tune.minbucket <- tune.rpart(isSpam~., data=train, 
+                             minbucket=c(1,5,10,15,20,25,30))
+plot(tune.minbucket, main = "Performance of Tree vs. MinBucket") #10
+```
+
+```{R Tree Model, fig.align = "center", fig.width=12, fig.heigh=12}
+set.seed(567)
+rpartFit1 = rpart(isSpam ~ ., 
                   data = train, 
                   method = "class", 
                   parms = list(split = "information"), 
-                  maxsurrogate = 1, 
-                  cp = 0, 
-                  minsplit = 100, 
-                  minbucket = 50)
-summary(emails.rp)
-fancyRpartPlot(emails.rp, main="Decision Tree Graph")
+                  maxsurrogate = 1,
+                  usesurrogate = 2,
+                  cp = 0.002,
+                  maxdepth = 11,
+                  minsplit = 40, 
+                  minbucket = 10)
+fancyRpartPlot(rpartFit1, main="Decision Tree Graph", cex = 0.7)
 ```
 
-```{R Predict Tree Model, fig.align = "center"}
-pred.rp = predict(emails.rp,
-                  newdata = test,
-                  type = "class")
-pred.rp
-
-predict(emails.rp, 
-        newdata = test,
-        type = "prob")
-
-predict(emails.rp, 
-        newdata = test,
-        type = "vector")
-
-predict(emails.rp, 
-        newdata = test,
-        type = "matrix")
-
-
-table(test$isSpam, pred.rp)
-
-printcp(emails.rp)
-plotcp(emails.rp)
-```
-
-```{R Prune Tree Model, fig.align = "center"}
-emails.rp <- prune(emails.rp, cp = 0.1)
-
-plot(emails.rp, 
-     compress=TRUE,
-     margin = .2)
-text(emails.rp, 
-     use.n=TRUE, 
-     all = TRUE,
-     fancy = TRUE)
+### Model Performance
+```{R Evaluate Performance}
+predictCM(rpartFit1, train, "class")
+predictCM(rpartFit1, test, "class")
 ```
 
 
