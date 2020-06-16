@@ -271,7 +271,7 @@ The complexity parameter influences computation time by pruning off splits that 
 
 Vectors of hyperparameter values to be tuned are performed in a grid search fashion to find the values that yield the misclassification rate in the tree. The grid search results are visualized in plots to easily locate parameter values that yield the lowest misclassification rate. The optimal values found were 0.002 for cp, 11 for max depth, 40 for min split, and 10 for minbucket. A max depth of 11 was chosen since there appears to be diminishing returns in error minimization following that value. A minsplit value of 40 and minbucket value of 10 were chosen because they were the highest values that yielded the lowest error. This was done to prevent overcomplex models and promote more efficient computational times. 
 
-```{R Hyperparameter Tuning}
+```{R Hyperparameter Tuning, fig.align = "center"}
 set.seed(567)
 #cp
 tune.cp <- tune.rpart(isSpam~., data=train, 
@@ -308,6 +308,13 @@ fancyRpartPlot(rpartFit1, main="Decision Tree Graph", cex = 0.7)
 
 ### Model Performance
 ```{R Evaluate Performance}
+# Source: https://csantill.github.io/RTuningModelParameters/
+predictCM = function(model,data,modelType)
+{
+  pred <-predict(model,data,type=modelType)
+  confusionMatrix(pred, reference=data$isSpam,positive='T')
+}
+
 predictCM(rpartFit1, train, "class")
 predictCM(rpartFit1, test, "class")
 ```
