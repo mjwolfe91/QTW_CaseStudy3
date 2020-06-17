@@ -20,19 +20,8 @@ library(tidyr)
 library(tidyverse)
 library(dplyr)
 library(e1071)
+library(ROCR)
 ```
-
-## Project Guidelines
-
-Using the “emailDFrp” dataset:
-
-1.	Build and evaluate a tree-based model for predicting “spam”
-2.	Plot and analyze the paths through one (or many) of your trees
-3.	Explain the parameters involved in “tuning” your model
-4.	Which variables were “most” important?
-5.	How did you evaluate the “performance” of your model?
-
-NOTE: You should use “split” your data when training your model.
 
 ## Objective
 Most spam messages can usually be identified in a person's email list through the subject line and sender, but may occassionally require a glimpse of the message contents to provide a more conclusive approach. Spam filters examine these various characteristics of an email before classifying the message and placing it into the inbox of spam folder. 
@@ -351,9 +340,15 @@ predictCM(rpartFit1, train, "class")
 #### Test Data
 ```{R Evaluate Testing Performance, fig.cap="Confusion Matrix and Performance Metrics of Test Data"}
 predictCM(rpartFit1, test, "class")
+pred1 <- prediction(predict(rpartFit1, type = "prob")[, 2], train$isSpam)
+plot(performance(pred1, "tpr", "fpr"))
+abline(0, 1, lty = 2)
+plot(performance(pred1, "acc"))
 ```
 
 <br>
+
+In reference to the above plots and confusion matrix, the overall accuracy of the model is 89.51%, with a confidence of 88.03% to 90.87%. The ROC curve demonstrates the true positive rate peaks when the false positive rate is around 25%, leading to the decrease in overall accuracy. McNemar's test is not statistically significant, indicating that there is likely not randomness in the difference between spam and non-spam. The No Information Rate and associated p-value overwhelmingly suggests that the accuracy rate is larger than the majority class (in this case, the negative class). This suggests it might be prudent to cross validate in future tests.
 
 ### Variable Importance
 A plot to visualize the feature variable importances is provided below in Figure 11. The splits in the decision tree were performed on the information gain index which is a measure of reduction in entropy or uncertainty in the data. The classification tree model aims to reduce the entropy (a measure of impurity) in the target variable (isSpam) by splitting the emails into subpopulations. There is roughly 30% impurity in the isSpam target variable since the original strata noted in the EDA was 70% non-spam and 30% spam.
