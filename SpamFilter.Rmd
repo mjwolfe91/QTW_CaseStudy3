@@ -269,29 +269,38 @@ The following hyperparameters were tuned in the classification tree: complexity 
 
 The complexity parameter influences computation time by pruning off splits that do not decrease the overall lack of fit by the cp value. The maximum depth is the length of the tree from root node to terminal node and controls for possible number of splits starting from the root node. The minsplit and minbucket parameters are related by restricting the minimum number of emails that must exist in a node. The difference is that the minsplit uses the parameter value to determine a potential split and minbucket uses the parameter value as a requirement size for a terminal node (bottom of tree).
 
-Vectors of hyperparameter values to be tuned are performed in a grid search fashion to find the values that yield the misclassification rate in the tree. The grid search results are visualized in plots to easily locate parameter values that yield the lowest misclassification rate. The optimal values found were 0.002 for cp, 11 for max depth, 40 for min split, and 10 for minbucket. A max depth of 11 was chosen since there appears to be diminishing returns in error minimization following that value. A minsplit value of 40 and minbucket value of 10 were chosen because they were the highest values that yielded the lowest error. This was done to prevent overcomplex models and promote more efficient computational times. 
+Vectors of hyperparameter values to be tuned are performed in a grid search fashion to find the values that yield the misclassification rate in the tree. The grid search results are visualized in plots to easily locate parameter values that yield the lowest misclassification rate. The optimal values found were 0.002 for cp [Figure 6], 11 for max depth [Figure 7], 40 for min split [Figure 8], and 10 for minbucket [Figure 9]. A max depth of 11 was chosen since there appears to be diminishing returns in error minimization following that value. A minsplit value of 40 and minbucket value of 10 were chosen because they were the highest values that yielded the lowest error. This was done to prevent overcomplex models and promote more efficient computational times. 
 
 ```{R Hyperparameter Tuning, fig.align = "center"}
 set.seed(567)
 #cp
 tune.cp <- tune.rpart(isSpam~., data=train, 
                       cp=c(0.001,0.0015,0.002,0.0025,0.003,0.0035,0.004)) #0.002
-plot(tune.cp, main = "Performance of Tree vs. cp") 
+plot(tune.cp, main = "Performance of Tree vs. cp", caption="Figure 6: Comparison of Classification Tree Model Performance of across different complexity parameter values") 
 #maxdepth
 tune.maxdepth <- tune.rpart(isSpam~., data=train, 
                             maxdepth=c(1:15)) #11
-plot(tune.maxdepth, main = "Performance of Tree vs. Max Depth")
+plot(tune.maxdepth, main = "Performance of Tree vs. Max Depth", caption="Figure 7: Comparison of Classification Tree Model Performance of across different maximum depths values")
 #minsplit
 tune.minsplit <- tune.rpart(isSpam~., data=train, 
                             minsplit=c(10,20,30,40,50)) #40
-plot(tune.minsplit, main = "Performance of Tree vs. MinSplit")
+plot(tune.minsplit, main = "Performance of Tree vs. MinSplit", caption="Figure 8: Comparison of Classification Tree Model Performance of across different minimum splits values")
 #minbucket
 tune.minbucket <- tune.rpart(isSpam~., data=train, 
                              minbucket=c(1,5,10,15,20,25,30))
-plot(tune.minbucket, main = "Performance of Tree vs. MinBucket") #10
+plot(tune.minbucket, main = "Performance of Tree vs. MinBucket", caption="Figure 9: Comparison of Classification Tree Model Performance of across different minimum buckets values") #10
 ```
 
-```{R Tree Model, fig.align = "center", fig.width=12, fig.heigh=12}
+<br>
+
+### Decision Tree from Recursive Partitioning
+The plot of the tuned classification tree model is provided below in Figure 10. The root node at the top contains all 4341 emails in the training data. The first split occurs on the number of forwards with emails having more than 5 forwards predicted to be not spam. A closer look at this specific split shows that 1432 emails have more than 5 forwards; in this specific partition (node 2) 99.5% of emails (1425) are correctly classified while 0.5% of emails (7) are misclassified as not spam. This subpopulation of emails containing more than 5 forwards has the highest percentage of messages that were not spam in the training data.
+
+In the other direction of the split, 2909 emails have 5 or less forwards, but there is a large misclassification rate of 45% so further partitions are required. The following split occurs on the percentage of capitals among all letters in the message body (perCaps) with emails having more than 13% predicted to be spam. In this specific partition (node 7) there are 655 emails, with 86% of them (563) correctly classified while 14% of them (92) are misclassified as spam. Following this path, the next split occurs on the number of lines in the body of the message (numLines) with emails having 9 or less lines predicted to be not spam. There are 51 emails in this partition (node 14), with 80% of them (41) correctly classified while 20% of them (10) are misclassified as not spam. 
+
+In the other direction of this split, 604 emails have more than 9 lines and are predicted to be spam messages. In this specific partition (node 15), 92% of emails (553) are correctly classified while (51) are misclassified as spam. From this partition, the last split of this path occurs on the "isWrote" feature indicating if the message contains the phrase “wrote:”. From these 604 emails, 12 contained the phrase "wrote:" and were all correctly predicted to be not spam. The other 592 emails did not contain the phrase "wrote:" and were predicted to be spam. In this specific partition (node 31), 93.4% of emails (553) were correctly classified while 6.6% (39) were misclassified as spam. This subpopulation of emails in node 31 containing 5 forwards or less, having more than 13% of capitals among all letters in the message body (perCaps), more than 9 lines (numLines), and does not contain the phrase "wrote:" (isWrote) has the highest percentage of messages that are spam in the training data.
+
+```{R Tree Model, fig.align = "center", fig.width=11.8, fig.heigh=14}
 set.seed(567)
 rpartFit1 = rpart(isSpam ~ ., 
                   data = train, 
@@ -303,7 +312,7 @@ rpartFit1 = rpart(isSpam ~ .,
                   maxdepth = 11,
                   minsplit = 40, 
                   minbucket = 10)
-fancyRpartPlot(rpartFit1, main="Decision Tree Graph", cex = 0.7)
+fancyRpartPlot(rpartFit1, main="Decision Tree Graph", cex = 0.7, caption="Figure 10: Plot of Recursive Partitioning Paths in Classification Decision Tree")
 ```
 
 ### Model Performance
