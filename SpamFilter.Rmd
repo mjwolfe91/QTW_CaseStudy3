@@ -326,7 +326,7 @@ rpartFit1 = rpart(isSpam ~ .,
 fancyRpartPlot(rpartFit1, main="Decision Tree Graph", cex = 0.7, caption="Figure 10: Plot of Recursive Partitioning Paths in Classification Decision Tree")
 ```
 
-### Model Performancedata
+### Model Performance
 ```{R Evaluate Performance}
 # Source: https://csantill.github.io/RTuningModelParameters/
 predictCM = function(model,data,modelType)
@@ -342,6 +342,8 @@ plot(performance(pred1, "tpr", "fpr"))
 abline(0, 1, lty = 2)
 plot(performance(pred1, "acc"))
 ```
+
+In reference to the above plots and confusion matrix, the overall accuracy of the model is 89.51%, with a confidence of 88.03% to 90.87%. The ROC curve demonstrates the true positive rate peaks when the false positive rate is around 25%, leading to the decrease in overall accuracy. McNemar's test is not statistically significant, indicating that there is likely not randomness in the difference between spam and non-spam.
 
 ### Variable Importance
 A plot to visualize the feature variable importances is provided below in Figure 11. The splits in the decision tree were performed on the information gain index which is a measure of reduction in entropy or uncertainty in the data. The classification tree model aims to reduce the entropy (a measure of impurity) in the target variable (isSpam) by splitting the emails into subpopulations. There is roughly 30% impurity in the isSpam target variable since the original strata noted in the EDA was 70% non-spam and 30% spam.
