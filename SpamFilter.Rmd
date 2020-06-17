@@ -17,6 +17,7 @@ library(ggplot2)
 library(GGally)
 library(itertools)
 library(tidyr)
+library(tidyverse)
 library(dplyr)
 library(e1071)
 ```
@@ -300,7 +301,9 @@ In the other direction of the split, 2909 emails have 5 or less forwards, but th
 
 In the other direction of this split, 604 emails have more than 9 lines and are predicted to be spam messages. In this specific partition (node 15), 92% of emails (553) are correctly classified while (51) are misclassified as spam. From this partition, the last split of this path occurs on the "isWrote" feature indicating if the message contains the phrase “wrote:”. From these 604 emails, 12 contained the phrase "wrote:" and were all correctly predicted to be not spam. The other 592 emails did not contain the phrase "wrote:" and were predicted to be spam. In this specific partition (node 31), 93.4% of emails (553) were correctly classified while 6.6% (39) were misclassified as spam. This subpopulation of emails in node 31 containing 5 forwards or less, having more than 13% of capitals among all letters in the message body (perCaps), more than 9 lines (numLines), and does not contain the phrase "wrote:" (isWrote) has the highest percentage of messages that are spam in the training data.
 
-```{R Tree Model, fig.align = "center", fig.width=11.8, fig.heigh=14}
+Note: The specific values referenced were extracted from the rpartFit1 model output provided in the Appendix under "Recursive Partitioning Decision Paths".
+
+```{R Tree Model, fig.align = "center", fig.width=12, fig.height=10}
 set.seed(567)
 rpartFit1 = rpart(isSpam ~ ., 
                   data = train, 
@@ -328,7 +331,24 @@ predictCM(rpartFit1, train, "class")
 predictCM(rpartFit1, test, "class")
 ```
 
+### Variable Importance
+```{R Variable Importance Plot, fig.align="center"}
+varImp = data.frame(imp = rpartFit1$variable.importance)
+varImp$top = ifelse(varImp$imp>200, TRUE, FALSE)
+varImp = varImp %>%
+  tibble::rownames_to_column() %>% 
+  dplyr::rename("variable" = rowname) %>% 
+  dplyr::arrange(imp) %>%
+  dplyr::mutate(variable = forcats::fct_inorder(variable))
+ggplot2::ggplot(varImp) +
+  geom_col(aes(x = variable, y = imp, fill = top),
+           col = "black", show.legend = F) +
+  coord_flip() +
+  labs(title="Feature Importance Plot", y="Information Gain", x="Feature Variables", caption="Figure 11: Plot of Feature Importance based on Information Gain") + 
+  theme(plot.title=element_text(size=12, hjust=0.5), plot.caption=element_text(size=11, hjust=0.5), legend.position="top", axis.text.x=element_text(angle=30, hjust=1))
+```
 
+## Conclusion
 
 
 ### Appendix
@@ -402,4 +422,9 @@ ggplot(data = TFcounts, aes(x = FeatureVariables, y = TFcounts.Freq, fill = TFco
   geom_text(aes(label = paste0(round((TFcounts.Freq/total)*100,1),"%"),y=labelpos), size = 4) +
   labs(title="Percentage of True/False Values per Categorical Variable (Test Split)", x="Categorical Feature Variable", y="Percentage of Values", fill="Class Labels")+#, caption="Plot of Class Label Distribution per Categorical Feature Variable (Test Data)") + 
   theme(plot.title=element_text(size=12, hjust=0.5), plot.caption=element_text(size=11, hjust=0.5), legend.position="top", axis.text.x=element_text(angle=30, hjust=1))
+```
+
+#### Recursive Partitioning Decision Paths of Classification Tree-Based Model
+``` {R}
+rpartFit1
 ```
