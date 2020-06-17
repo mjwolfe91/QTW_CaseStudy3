@@ -20,6 +20,7 @@ library(tidyr)
 library(tidyverse)
 library(dplyr)
 library(e1071)
+library(ROCR)
 ```
 
 ## Project Guidelines
@@ -325,7 +326,7 @@ rpartFit1 = rpart(isSpam ~ .,
 fancyRpartPlot(rpartFit1, main="Decision Tree Graph", cex = 0.7, caption="Figure 10: Plot of Recursive Partitioning Paths in Classification Decision Tree")
 ```
 
-### Model Performance
+### Model Performancedata
 ```{R Evaluate Performance}
 # Source: https://csantill.github.io/RTuningModelParameters/
 predictCM = function(model,data,modelType)
@@ -336,6 +337,10 @@ predictCM = function(model,data,modelType)
 
 predictCM(rpartFit1, train, "class")
 predictCM(rpartFit1, test, "class")
+pred1 <- prediction(predict(rpartFit1, type = "prob")[, 2], train$isSpam)
+plot(performance(pred1, "tpr", "fpr"))
+abline(0, 1, lty = 2)
+plot(performance(pred1, "acc"))
 ```
 
 ### Variable Importance
