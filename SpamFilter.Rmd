@@ -270,26 +270,33 @@ The following hyperparameters were tuned in the classification tree: complexity 
 
 The complexity parameter influences computation time by pruning off splits that do not decrease the overall lack of fit by the cp value. The maximum depth is the length of the tree from root node to terminal node and controls for possible number of splits starting from the root node. The minsplit and minbucket parameters are related by restricting the minimum number of emails that must exist in a node. The difference is that the minsplit uses the parameter value to determine a potential split and minbucket uses the parameter value as a requirement size for a terminal node (bottom of tree).
 
-Vectors of hyperparameter values to be tuned are performed in a grid search fashion to find the values that yield the misclassification rate in the tree. The grid search results are visualized in plots to easily locate parameter values that yield the lowest misclassification rate. The optimal values found were 0.002 for cp [Figure 6], 11 for max depth [Figure 7], 40 for min split [Figure 8], and 10 for minbucket [Figure 9]. A max depth of 11 was chosen since there appears to be diminishing returns in error minimization following that value. A minsplit value of 40 and minbucket value of 10 were chosen because they were the highest values that yielded the lowest error. This was done to prevent overcomplex models and promote more efficient computational times. 
+Vectors of hyperparameter values to be tuned are performed in a grid search fashion to find the values that yield the misclassification rate in the tree. The grid search results are visualized in plots to easily locate optimal hyperparameter values (highlighted in red) that yield the lowest misclassification rate. The optimal values found were 0.002 for cp [Figure 6], 11 for max depth [Figure 7], 40 for min split [Figure 8], and 10 for minbucket [Figure 9]. A max depth of 11 was chosen since there appears to be diminishing returns in error minimization following that value. A minsplit value of 40 and minbucket value of 10 were chosen because they were the highest values that yielded the lowest error. This was done to prevent overcomplex models and promote more efficient computational times. 
 
-```{R Hyperparameter Tuning, fig.align = "center"}
+```{R Hyperparameter Tuning, fig.align = "center", fig.width=7, fig.height=7}
 set.seed(567)
 #cp
 tune.cp <- tune.rpart(isSpam~., data=train, 
                       cp=c(0.001,0.0015,0.002,0.0025,0.003,0.0035,0.004)) #0.002
-plot(tune.cp, main = "Performance of Tree vs. cp", caption="Figure 6: Comparison of Classification Tree Model Performance of across different complexity parameter values") 
+plot(tune.cp$performances$cp, tune.cp$performances$error, xlab = "cp", ylab = "Error", col = ifelse(tune.cp$performances$cp==0.002, "red", "black"), type="b", cex=2)
+title(main="Performance of Tree vs. cp", sub="Figure 6: Comparison of Classification Tree Model Performance of across different complexity parameter values", cex.sub=0.75)
+
 #maxdepth
 tune.maxdepth <- tune.rpart(isSpam~., data=train, 
                             maxdepth=c(1:15)) #11
-plot(tune.maxdepth, main = "Performance of Tree vs. Max Depth", caption="Figure 7: Comparison of Classification Tree Model Performance of across different maximum depths values")
+plot(tune.maxdepth$performances$maxdepth, tune.maxdepth$performances$error, xlab = "Max Depth", ylab = "Error", col = ifelse(tune.maxdepth$performances$maxdepth==11, "red", "black"), type="b", cex=2)
+title(main="Performance of Tree vs. Maximum Depth", sub="Figure 7: Comparison of Classification Tree Model Performance of across different maximum depths values", cex.sub=0.75)
+
 #minsplit
 tune.minsplit <- tune.rpart(isSpam~., data=train, 
                             minsplit=c(10,20,30,40,50)) #40
-plot(tune.minsplit, main = "Performance of Tree vs. MinSplit", caption="Figure 8: Comparison of Classification Tree Model Performance of across different minimum splits values")
+plot(tune.minsplit$performances$minsplit, tune.minsplit$performances$error, xlab = "Min Split", ylab = "Error", col = ifelse(tune.minsplit$performances$minsplit==40, "red", "black"), type="b", cex=2)
+title(main="Performance of Tree vs. Minimum Split", sub="Figure 8: Comparison of Classification Tree Model Performance of across different minimum splits values", cex.sub=0.75)
+
 #minbucket
 tune.minbucket <- tune.rpart(isSpam~., data=train, 
                              minbucket=c(1,5,10,15,20,25,30))
-plot(tune.minbucket, main = "Performance of Tree vs. MinBucket", caption="Figure 9: Comparison of Classification Tree Model Performance of across different minimum buckets values") #10
+plot(tune.minbucket$performances$minbucket, tune.minbucket$performances$error, xlab = "Min Bucket", ylab = "Error", col = ifelse(tune.minbucket$performances$minbucket==10, "red", "black"), type="b", cex=2)
+title(main="Performance of Tree vs. Minimum Bucket", sub="Figure 9: Comparison of Classification Tree Model Performance of across different minimum buckets values", cex.sub=0.75)
 ```
 
 <br>
@@ -427,4 +434,42 @@ ggplot(data = TFcounts, aes(x = FeatureVariables, y = TFcounts.Freq, fill = TFco
 #### Recursive Partitioning Decision Paths of Classification Tree-Based Model
 ``` {R}
 rpartFit1
+```
+
+#### Exclusion of numLines
+``` {R}
+#cp
+set.seed(567)
+tune.cp <- tune.rpart(isSpam~., data=train[,names(train)!="numLines"], 
+                      cp=c(0.001,0.0015,0.002,0.0025,0.003,0.0035,0.004)) #0.0015
+plot(tune.cp, main = "Performance of Tree vs. cp") 
+#maxdepth
+set.seed(567)
+tune.maxdepth <- tune.rpart(isSpam~., data=train[,names(train)!="numLines"], 
+                      maxdepth=c(1:15)) #10/11
+plot(tune.maxdepth, main = "Performance of Tree vs. Max Depth")
+#minsplit
+set.seed(567)
+tune.minsplit <- tune.rpart(isSpam~., data=train[,names(train)!="numLines"], 
+                            minsplit=c(10,20,30,40,50)) #30
+plot(tune.minsplit, main = "Performance of Tree vs. MinSplit")
+#minbucket
+set.seed(567)
+tune.minbucket <- tune.rpart(isSpam~., data=train[,names(train)!="numLines"], 
+                            minbucket=c(1,5,10,15,20,25,30)) #20
+plot(tune.minbucket, main = "Performance of Tree vs. MinBucket") 
+
+set.seed(567)
+rpartFit1 = rpart(isSpam ~ ., 
+                  data = train[,names(train)!="numLines"], 
+                  method = "class", 
+                  parms = list(split = "information"), 
+                  maxsurrogate = 1,
+                  usesurrogate = 2,
+                  cp = 0.0020,
+                  maxdepth = 11,
+                  minsplit = 40, 
+                  minbucket = 10)
+predictCM(rpartFit1, train[,names(train)!="numLines"], "class")
+predictCM(rpartFit1, test[,names(test)!="numLines"], "class")
 ```
