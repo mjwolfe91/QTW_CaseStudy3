@@ -170,6 +170,8 @@ The last 3 continuous variables are visualized in a correlation matrix due to th
 
 The outliers for numLines and bodyCharCt appear to come from the same emails (index 4193), but do not seem to be errors since their is no maximum text length restriction for emails sent. The large number of dollar signs indicates an outlier (index 3997) that does seem out of the ordinary, but may be context specific regarding finances. The decision on how to handle these outliers will be further examined when building the model and evaluating if its inclusion affects performance. Furthermore, this figure indicates an extremely high correlation between the numLines and bodyCharCt since both of these features are measurements of message length. The inclusion of both these variables will be further evaluated in model building to evaluate their effects on performance. Note: bodyCharCt seems to be a more informative measurement of message length.
 
+<br>
+
 ```{R Correlation Matrix, fig.align="center", fig.height=7, fig.width=7, message=FALSE}
 fitLine <- function(data, mapping, ...){
   p <- ggplot(data = data, mapping = mapping)  +
@@ -200,12 +202,14 @@ train <- emails[spamStrata,]
 test <- emails[-spamStrata,]
 ```
 
+<br>
 
 ### Impute Missing Values
 The processed emails dataframe has 7 feature that contain missing values: subSpamWords has 4, noHost has 1, isYelling has 4, subExcCt has 16, subQuesCt has 16, and subBlanks has 16. The "numRec" feature has an overwhelmingly larger amount of missing values with 147, as highlighted below in red within Figure 5.
 
 The imputation methods will be made based on only the training data split to prevent data leakage. The categorical variables ["subSpamWords", "noHost", "isYelling"] will be imputed via probability based on the distribution frequency of the class labels. The continuous variables will be imputed based on the average/median value of the data points within that respective feature.
 
+<br>
 
 ```{R Visualize Missing Values, fig.align = "center", fig.width=7, fig.height=7}
 # Initialize an empty data frame
@@ -265,6 +269,7 @@ test$isYelling = factor(ifelse(is.na(test$isYelling), sample(x=factor(c(F,T), la
 
 ## Classification Tree-Based Model
 The classification tree will be trained through recursive partitioning on the training data split. This approach builds a decision tree that aims to accurately label the emails by splitting into subpopulations of emails based on threshold values or labels of the independent explanatory variables in the data. The recursive process begins with all emails in the training data labeled according to the target variable (isSpam), a number of splits on different feature criterion will follow based on the inputted model hyperparameters.
+
 
 ### Hyperparameter Tuning
 The following hyperparameters were tuned in the classification tree: complexity parameter (cp), the maximum depth of any node in the final tree (maxdepth), the minimum number of observations that must exist in a node for a split to occur (minsplit), and the number of observations in any terminal node (minbucket).
@@ -326,8 +331,12 @@ rpartFit1 = rpart(isSpam ~ .,
 fancyRpartPlot(rpartFit1, main="Decision Tree Graph", cex = 0.7, caption="Figure 10: Plot of Recursive Partitioning Paths in Classification Decision Tree")
 ```
 
+<br>
+
 ### Model Performance
-```{R Evaluate Performance}
+
+#### Training Data
+```{R Evaluate Training Performance, fig.cap="Confusion Matrix and Performance Metrics of Training Data"}
 # Source: https://csantill.github.io/RTuningModelParameters/
 predictCM = function(model,data,modelType)
 {
@@ -336,6 +345,12 @@ predictCM = function(model,data,modelType)
 }
 
 predictCM(rpartFit1, train, "class")
+```
+
+<br>
+
+#### Test Data
+```{R Evaluate Testing Performance, fig.cap="Confusion Matrix and Performance Metrics of Test Data"}
 predictCM(rpartFit1, test, "class")
 pred1 <- prediction(predict(rpartFit1, type = "prob")[, 2], train$isSpam)
 plot(performance(pred1, "tpr", "fpr"))
@@ -345,12 +360,16 @@ plot(performance(pred1, "acc"))
 
 In reference to the above plots and confusion matrix, the overall accuracy of the model is 89.51%, with a confidence of 88.03% to 90.87%. The ROC curve demonstrates the true positive rate peaks when the false positive rate is around 25%, leading to the decrease in overall accuracy. McNemar's test is not statistically significant, indicating that there is likely not randomness in the difference between spam and non-spam.
 
+<br>
+
 ### Variable Importance
 A plot to visualize the feature variable importances is provided below in Figure 11. The splits in the decision tree were performed on the information gain index which is a measure of reduction in entropy or uncertainty in the data. The classification tree model aims to reduce the entropy (a measure of impurity) in the target variable (isSpam) by splitting the emails into subpopulations. There is roughly 30% impurity in the isSpam target variable since the original strata noted in the EDA was 70% non-spam and 30% spam.
 
 The decision tree splits these emails into partitions to reduce the impurity of the population based on the explanatory variables. The greater the reduction in this impurity following a split on an explanatory variable, the more information gained about the target variable from this explanatory variable. This provides a measure of which explanatory variables are the most useful in discriminating between classes of our target variable. 
 
 From the classification tree trained, the 3 most important features in discriminating between spam and non-spam emails are the number of forwards, the percentage of capitals among all letters in the message body (perCaps), and if “Re:” appears at the start of the subject (isRe). The information gain measure of these top 3 variables are colored below in green within Figure 11.
+
+<br>
 
 ```{R Variable Importance Plot, fig.align="center", fig.height=7, fid.width=7}
 varImp = data.frame(imp = rpartFit1$variable.importance)
@@ -368,11 +387,23 @@ ggplot2::ggplot(varImp) +
   theme(plot.title=element_text(size=12, hjust=0.5), plot.caption=element_text(size=11, hjust=0.5), legend.position="top", axis.text.x=element_text(angle=30, hjust=1))
 ```
 
-## Conclusion
+<br>
 
+## Conclusion
+The existing outliers were kept when training the classification tree model since they did not appear to be errors. The outlier for the numDlr variable was also kept since it was not an important feeature that heavily influenced differentiation between spam and non-spam emails. A separate model was also trained with the removal of the numLines variable, but did not show noticable improvements over the tree model with all variables included (provided in the Appendix). The decision was made to train the model using all features rather than exlcuding numLines.
+
+The variables "forwards", "perCaps", and "isRe" provided the most information gain following a partition. However, it is interesting to note that the decision tree plotted did not have any partition splits on the "isRe" variable despite its large information gain value. The other two variables "forwards" and "perCaps" were shown to be important splits in the decision tree, occuring as the first two partition splits in the tree.
+
+The classification tree generalized well to the test data with slightly lower performance than the training data and did not present with issues of overfitting. The classification accuracy of 89.6% indicates that the model has good overall performance with 85.1% sensitivity and 91.6% specificity. However, the model has a comparatively low precision (positive predictive value) of 81.5% as a result of fewer spam messages in the data compared to non-spam messages. 
+
+Suggestions to further improve this study are to employ a stratified k-fold cross validation scheme on the training data split to limit model bias since only a stratified train-test split was used in this analysis. Furthermore, an ensemble learning method such as random forests on classification trees could be implemented to improve model performance, particularly to address the lower precision metric. Additional trees in an ensemble model should aim to include the "isRe" feature since it was one of top 3 most important variables based on information gain.
+
+<br>
+<br>
 
 ### Appendix
 Further exploratory data analysis can be examined in the tables and figures provided below to better understand the data and where specific values mentioned were extracted from.
+
 
 #### Entire Processed Emails Data Frame
 ```{R Summary Statistics}
@@ -407,6 +438,8 @@ kable(summary(test[,1:17]), caption = "Summary Statistics of Categorical Variabl
   kable_styling(bootstrap_options = c("striped","responsive")) %>%
   scroll_box(width = "100%", height = "177px")
 ```
+
+<br>
 
 ```{R Class Distribution Check for Categorical Variables Following Stratified Sample Split, fig.align = "center", fig.width = 11.5, fig.height = 6}
 # Initialize an empty dataframe
@@ -443,11 +476,13 @@ ggplot(data = TFcounts, aes(x = FeatureVariables, y = TFcounts.Freq, fill = TFco
   labs(title="Percentage of True/False Values per Categorical Variable (Test Split)", x="Categorical Feature Variable", y="Percentage of Values", fill="Class Labels")+#, caption="Plot of Class Label Distribution per Categorical Feature Variable (Test Data)") + 
   theme(plot.title=element_text(size=12, hjust=0.5), plot.caption=element_text(size=11, hjust=0.5), legend.position="top", axis.text.x=element_text(angle=30, hjust=1))
 ```
+<br>
 
 #### Recursive Partitioning Decision Paths of Classification Tree-Based Model
 ``` {R}
 rpartFit1
 ```
+<br>
 
 #### Exclusion of numLines
 ``` {R}

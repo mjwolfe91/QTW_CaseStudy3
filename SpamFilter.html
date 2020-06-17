@@ -2750,6 +2750,8 @@ Table 3: Processed Emails Data Frame Structure and Variable Data Types
 </div>
 <div id="model-performance" class="section level3">
 <h3>Model Performance</h3>
+<div id="training-data" class="section level4">
+<h4>Training Data</h4>
 <pre><code>## Confusion Matrix and Statistics
 ## 
 ##           Reference
@@ -2777,6 +2779,9 @@ Table 3: Processed Emails Data Frame Structure and Variable Data Types
 ##                                           
 ##        &#39;Positive&#39; Class : T               
 ## </code></pre>
+</div>
+<div id="test-data" class="section level4">
+<h4>Test Data</h4>
 <pre><code>## Confusion Matrix and Statistics
 ## 
 ##           Reference
@@ -2805,6 +2810,7 @@ Table 3: Processed Emails Data Frame Structure and Variable Data Types
 ##        &#39;Positive&#39; Class : T               
 ## </code></pre>
 </div>
+</div>
 <div id="variable-importance" class="section level3">
 <h3>Variable Importance</h3>
 <p>A plot to visualize the feature variable importances is provided below in Figure 11. The splits in the decision tree were performed on the information gain index which is a measure of reduction in entropy or uncertainty in the data. The classification tree model aims to reduce the entropy (a measure of impurity) in the target variable (isSpam) by splitting the emails into subpopulations. There is roughly 30% impurity in the isSpam target variable since the original strata noted in the EDA was 70% non-spam and 30% spam.</p>
@@ -2815,6 +2821,10 @@ Table 3: Processed Emails Data Frame Structure and Variable Data Types
 </div>
 <div id="conclusion" class="section level2">
 <h2>Conclusion</h2>
+<p>The existing outliers were kept when training the classification tree model since they did not appear to be errors. The outlier for the numDlr variable was also kept since it was not an important feeature that heavily influenced differentiation between spam and non-spam emails. A separate model was also trained with the removal of the numLines variable, but did not show noticable improvements over the tree model with all variables included (provided in the Appendix). The decision was made to train the model using all features rather than exlcuding numLines.</p>
+<p>The variables “forwards”, “perCaps”, and “isRe” provided the most information gain following a partition. However, it is interesting to note that the decision tree plotted did not have any partition splits on the “isRe” variable despite its large information gain value. The other two variables “forwards” and “perCaps” were shown to be important splits in the decision tree, occuring as the first two partition splits in the tree.</p>
+<p>The classification tree generalized well to the test data with slightly lower performance than the training data and did not present with issues of overfitting. The classification accuracy of 89.6% indicates that the model has good overall performance with 85.1% sensitivity and 91.6% specificity. However, the model has a comparatively low precision (positive predictive value) of 81.5% as a result of fewer spam messages in the data compared to non-spam messages.</p>
+<p>Suggestions to further improve this study are to employ a stratified k-fold cross validation scheme on the training data split to limit model bias since only a stratified train-test split was used in this analysis. Furthermore, an ensemble learning method such as random forests on classification trees could be implemented to improve model performance, particularly to address the lower precision metric. Additional trees in an ensemble model should aim to include the “isRe” feature since it was one of top 3 most important variables based on information gain.</p>
 <div id="appendix" class="section level3">
 <h3>Appendix</h3>
 <p>Further exploratory data analysis can be examined in the tables and figures provided below to better understand the data and where specific values mentioned were extracted from.</p>
