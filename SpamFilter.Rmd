@@ -339,7 +339,13 @@ predictCM(rpartFit1, test, "class")
 ```
 
 ### Variable Importance
-```{R Variable Importance Plot, fig.align="center"}
+A plot to visualize the feature variable importances is provided below in Figure 11. The splits in the decision tree were performed on the information gain index which is a measure of reduction in entropy or uncertainty in the data. The classification tree model aims to reduce the entropy (a measure of impurity) in the target variable (isSpam) by splitting the emails into subpopulations. There is roughly 30% impurity in the isSpam target variable since the original strata noted in the EDA was 70% non-spam and 30% spam.
+
+The decision tree splits these emails into partitions to reduce the impurity of the population based on the explanatory variables. The greater the reduction in this impurity following a split on an explanatory variable, the more information gained about the target variable from this explanatory variable. This provides a measure of which explanatory variables are the most useful in discriminating between classes of our target variable. 
+
+From the classification tree trained, the 3 most important features in discriminating between spam and non-spam emails are the number of forwards, the percentage of capitals among all letters in the message body (perCaps), and if “Re:” appears at the start of the subject (isRe). The information gain measure of these top 3 variables are colored below in green within Figure 11.
+
+```{R Variable Importance Plot, fig.align="center", fig.height=7, fid.width=7}
 varImp = data.frame(imp = rpartFit1$variable.importance)
 varImp$top = ifelse(varImp$imp>200, TRUE, FALSE)
 varImp = varImp %>%
